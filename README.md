@@ -1,5 +1,5 @@
-# TensorFlowStuff
-To practice with TensorFlow
+# Pytoooorch
+To practice with pytorch (tensorflow out)
 
 IDEAS
 Videogame success
