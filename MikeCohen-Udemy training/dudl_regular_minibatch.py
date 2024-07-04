@@ -21,63 +21,94 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader,TensorDataset
 
-# import dataset
+# for dataset management
 import pandas as pd
-iris = pd.read_csv('https://raw.githubusercontent.com/mwaskom/seaborn-data/master/iris.csv')
 
-# plot the data
-iris.plot(marker='o',linestyle='none',figsize=(12,6))
-plt.xlabel('Sample number')
-plt.ylabel('Value')
+import seaborn as sns
+
+url = "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv"
+
+data = pd.read_csv(url,sep=';')
+data
+
+# describe the data
+data.describe()
+
+# list number of unique values per column
+for i in data.keys():
+  print(f'{i} has {len(np.unique(data[i]))} unique values')
+
+# pairwise plots
+cols2plot = ['fixed acidity','volatile acidity','citric acid','quality']
+sns.pairplot(data[cols2plot],kind='reg',hue='quality')
 plt.show()
 
-####   ------------------------------- < NOTE ABOUT THIS CELL!!! > ---------------------------------------   ####
-#                                                                                                               #
-# The code here is intentionally commented out. We're going to use this in the lecture "The importance of       #
-# data standardization" in the next section. If you're not doing that lecture, leave this commented! Thanks!    #
-#                                                                                                               #
-####   ------------------------------- </ NOTE ABOUT THIS CELL!!! > --------------------------------------   ####
+### z-score all variables except for quality
 
+# find the columns we want to normalize (all except quality)
+cols2zscore = data.keys()
+cols2zscore = cols2zscore.drop('quality')
 
-# # z-score the data
-# import scipy.stats as stats
-# cols2zscore = iris.keys()
-# cols2zscore = cols2zscore.drop('species')
-# iris[cols2zscore] = iris[cols2zscore].apply(stats.zscore)
+# z-score (written out for clarity)
+for col in cols2zscore:
+  meanval   = np.mean(data[col])
+  stdev     = np.std(data[col],ddof=1)
+  data[col] = (data[col]-meanval) / stdev
 
-# iris.plot(marker='o',linestyle='none',figsize=(12,6))
-# plt.xlabel('Sample number')
-# plt.ylabel('Value')
-# plt.show()
+# can also do more compactly
+#data[cols2zscore] = data[cols2zscore].apply(stats.zscore)
 
-# organize the data
+data.describe()
+
+fig,ax = plt.subplots(1,figsize=(17,4))
+ax = sns.boxplot(data=data)
+ax.set_xticklabels(ax.get_xticklabels(),rotation=45)
+plt.show()
+
+# distribution quality values
+fig = plt.figure(figsize=(5,3))
+plt.rcParams.update({'font.size': 15}) # increase font size in the figure
+
+counts = data['quality'].value_counts()
+plt.bar(list(counts.keys()),counts)
+plt.xlabel('Quality rating')
+plt.ylabel('Count')
+plt.show()
+
+# create a new column for binarized (boolean) quality
+data['boolQuality'] = 0
+# data['boolQuality'][data['quality']<6] = 0 # implicit in the code! just here for clarity
+data['boolQuality'][data['quality']>5] = 1
+
+data[['quality','boolQuality']]
 
 # convert from pandas dataframe to tensor
-data = torch.tensor( iris[iris.columns[0:4]].values ).float()
+dataT  = torch.tensor( data[cols2zscore].values ).float()
+labels = torch.tensor( data['boolQuality'].values ).float()
 
-# transform species to number
-labels = torch.zeros(len(data), dtype=torch.long)
-# labels[iris.species=='setosa']   = 0 # don't need!
-labels[iris.species=='versicolor'] = 1
-labels[iris.species=='virginica']  = 2
+print( dataT.shape )
+print( labels.shape )
 
-"""# Break the data into batches"""
+# we'll actually need the labels to be a "tensor"
+labels = labels[:,None]
+print( labels.shape )
 
 # use scikitlearn to split the data
-train_data,test_data, train_labels,test_labels = train_test_split(data, labels, test_size=.2)
+train_data,test_data, train_labels,test_labels = train_test_split(dataT, labels, test_size=.1)
 
 
 # then convert them into PyTorch Datasets (note: already converted to tensors)
 train_data = TensorDataset(train_data,train_labels)
 test_data  = TensorDataset(test_data,test_labels)
 
-# check sizes of data batches
-for X,y in train_loader:
-  print(X.shape,y.shape)
 
-# go back and set drop_last=True in training DataLoader
+# translate into dataloader objects
+test_loader  = DataLoader(test_data,batch_size=test_data.tensors[0].shape[0])
 
-"""# Construct the model and training plans"""
+"""# Break the data into batches
+
+# Construct the model and training plans
+"""
 
 # a function that creates the ANN model
 
@@ -85,25 +116,27 @@ def createANewModel():
 
   # model architecture
   ANNiris = nn.Sequential(
-      nn.Linear(4,64),   # input layer
+      nn.Linear(11,16),   # input layer
       nn.ReLU(),         # activation unit
-      nn.Linear(64,64),  # hidden layer
+      nn.Linear(16,32),   # hidden layer
       nn.ReLU(),         # activation unit
-      nn.Linear(64,3),   # output units
+      nn.Linear(32,32),   # hidden layer
+      nn.ReLU(),         # activation unit
+      nn.Linear(32,1),   # output units
         )
 
   # loss function
-  lossfun = nn.CrossEntropyLoss()
+  lossfun = nn.BCEWithLogitsLoss()
 
   # optimizer
-  optimizer = torch.optim.SGD(ANNiris.parameters(),lr=.001)
+  optimizer = torch.optim.SGD(ANNiris.parameters(),lr=.01)
 
   return ANNiris,lossfun,optimizer
 
 # train the model
 
 # global parameter
-numepochs = 2500
+numepochs = 1000
 
 def trainTheModel():
 
@@ -130,8 +163,8 @@ def trainTheModel():
       optimizer.step()
 
       # compute training accuracy just for this batch
-      batchAcc.append( 100*torch.mean((torch.argmax(yHat,axis=1) == y).float()).item() )
-      batchLoss.append( loss.item() )
+      batchAcc.append( 100*torch.mean(((yHat > 0) == y).float()).item() )
+      batchLoss.append(loss.item())
     # end of batch loop...
 
     # now that we've trained through the batches, get their average training accuracy
@@ -140,37 +173,37 @@ def trainTheModel():
 
     # test accuracy
     X,y = next(iter(test_loader)) # extract X,y from test dataloader
-    predlabels = torch.argmax( ANNiris(X),axis=1 )
-    testAcc.append( 100*torch.mean((predlabels == y).float()).item() )
+
+    testAcc.append( 100*torch.mean(((ANNiris(X) > 0)  == y).float()).item() )
+
 
   # function output
   return trainAcc,testAcc,losses
 
 """# Test it out"""
 
-# create a model
+# test the model
+train_loader = DataLoader(train_data,batch_size=32,shuffle=True,drop_last=True)
+
+ANNiris,lossfun,optimizer = createANewModel()
+trainAcc,testAcc,losses = trainTheModel()
+
+# range of batch sizes to test
 batchSizes = 2**np.arange(1, 7)
 
 trainAccXbatchSize = np.zeros((numepochs,len(batchSizes)) )
 testAccXbatchSize  = np.zeros((numepochs,len(batchSizes) ))
 lossesXbatchSize   = np.zeros((numepochs,len(batchSizes) ))
-test_loader  = DataLoader(test_data,batch_size=test_data.tensors[0].shape[0]) # how big should these batches be??
 
-
-# print (batchSizes.size)
-# # # finally, translate into dataloader objects
+# # #   # create/train the model in batches
 for batchsize in range(len( batchSizes)):
   train_loader = DataLoader(train_data,batch_size=int(batchSizes[batchsize]),shuffle=True,drop_last=True)
 
-  # train the model
   ANNiris,lossfun,optimizer = createANewModel()
   trainAcc,testAcc,losses = trainTheModel()
   trainAccXbatchSize[:,batchsize] = trainAcc
   testAccXbatchSize[:,batchsize] = testAcc
   lossesXbatchSize[:,batchsize] = losses
-
-np.zeros((numepochs,len(batchSizes)) ).shape
-trainAccXbatchSize[:,batchsize] .shape
 
 fix, ax = plt.subplots(1,2,figsize=(17,7))
 ax[0].plot(trainAccXbatchSize)
@@ -186,25 +219,6 @@ for i in range(2):
   ax[i].set_ylim([50,101])
   ax[i].grid()
 plt.show()
-
-# # plot the results
-# fig,ax = plt.subplots(1,2,figsize=(15,5))
-
-
-# ax[0].plot(losses,'k^-')
-# ax[0].set_ylabel('Loss')
-# ax[0].set_xlabel('Epochs')
-# ax[0].set_title('Losses with minibatch size=' + str(batchsize))
-
-# ax[1].plot(trainAcc,'ro-')
-# ax[1].plot(testAcc,'bs-')
-# ax[1].set_title('Accuracy with minibatch size=' + str(batchsize))
-# ax[1].set_xlabel('Epochs')
-# ax[1].set_ylabel('Accuracy (%)')
-# ax[1].legend(['Train','Test'])
-# ax[1].set_ylim([27,103])
-
-# plt.show()
 
 
 
