@@ -118,8 +118,10 @@ def createANewModel():
   ANNiris = nn.Sequential(
       nn.Linear(11,16),   # input layer
       nn.ReLU(),         # activation unit
+      nn.BatchNorm1d(16), #layer norm
       nn.Linear(16,32),   # hidden layer
       nn.ReLU(),         # activation unit
+      nn.BatchNorm1d(32), #layer norm
       nn.Linear(32,32),   # hidden layer
       nn.ReLU(),         # activation unit
       nn.Linear(32,1),   # output units
