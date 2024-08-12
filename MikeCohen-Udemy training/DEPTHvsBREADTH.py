@@ -100,8 +100,8 @@ def createTheMNISTNet(nUnits,nLayers):
 
   # forward pass
     def forward(self,x):
-      # input layer (note: the code in the video omits the relu after this layer)
-      x = F.relu( self.layers['input'](x) )
+      # input layer
+      x =  self.layers['input'](x)
 
       # hidden layers
       for i in range(self.nLayers):
@@ -116,7 +116,7 @@ def createTheMNISTNet(nUnits,nLayers):
   net = mnistNet(nUnits,nLayers)
 
   # loss function
-  lossfun = nn.NLLLoss()
+  lossfun = nn.CrossEntropyLoss()
 
   # optimizer
   optimizer = torch.optim.SGD(net.parameters(),lr=.01)
@@ -213,13 +213,19 @@ nUnitsPerLayer = range(50, 251, 50)
 
 accuracies = np.zeros ((2, len(nUnitsPerLayer),len(nLayers)))
 
+# for UnitsPerLayerId in  range(len(nUnitsPerLayer)):
+#   for LayerId in  range(len(nLayers)):
+
 for LayerId in  range(len(nLayers)):
   for UnitsPerLayerId in  range(len(nUnitsPerLayer)):
 
     trainAcc,testAcc,losses,net = function2trainTheModel(nUnitsPerLayer[UnitsPerLayerId],nLayers[LayerId])
-    accuracies[0][UnitsPerLayerId][LayerId] = np.mean(trainAcc[-5:])
-    accuracies[1][UnitsPerLayerId][LayerId] = np.mean(testAcc[-5:])
+    accuracies[0,UnitsPerLayerId,LayerId] = np.mean(trainAcc[-5:])
+    accuracies[1,UnitsPerLayerId,LayerId] = np.mean(testAcc[-5:])
     print ("finished for nLayers "+str(nLayers[LayerId])+ " with "+str(nUnitsPerLayer[UnitsPerLayerId])+" units per layer")
+
+print (accuracies.shape)
+accuracies[1,2,:]
 
 fig,ax = plt.subplots(1,2,figsize=(15,6))
 
@@ -227,7 +233,7 @@ ax[0].plot(nUnitsPerLayer,accuracies[0,:,:],'o-',markerfacecolor='w',markersize=
 ax[1].plot(nUnitsPerLayer,accuracies[1,:,:],'o-',markerfacecolor='w',markersize=9)
 
 
-for i in range (2)
+for i in range (2):
   ax[i].legend(nLayers)
   ax[i].set_ylabel("Accuracy")
   ax[i].set_xlabel("Number of hiiden layers")
